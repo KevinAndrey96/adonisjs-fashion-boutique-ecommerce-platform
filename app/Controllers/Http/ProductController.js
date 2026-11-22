@@ -1,351 +1,380 @@
 'use strict'
+
 const Product = use('App/Models/Product')
 const Client = use('App/Models/Client')
 const Category = use('App/Models/Category')
 const Order = use('App/Models/Order')
 const OrderProduct = use('App/Models/OrderProduct')
 const Coupon = use('App/Models/Coupon')
+const Env = use('Env')
+const crypto = require('crypto')
 
 class ProductController {
-    async index({ params, view }) {
-        const product = await Product.find(params.id);
-        product.price=this.formatCurrency("es-CO", "COP", 0, product.price);
-        const relateds= await Product.query().where("category","=",product.category).where("id","!=",product.id).fetch()
-        const categories = await Category.all()
-        console.log(product)
-        return view.render("product_detail", {product, relateds: relateds.toJSON(), categories: categories.toJSON()});
+  formatCurrency (locales, currency, fractionDigits, number) {
+    return new Intl.NumberFormat(locales, {
+      style: 'currency',
+      currency: currency,
+      minimumFractionDigits: fractionDigits
+    }).format(number || 0)
+  }
+
+  async index ({ params, view }) {
+    const product = await Product.findOrFail(params.id)
+    const productData = product.toJSON()
+    productData.price = this.formatCurrency('es-CO', 'COP', 0, product.price)
+
+    const relateds = await Product.query()
+      .where('category', '=', product.category)
+      .where('id', '!=', product.id)
+      .limit(6)
+      .fetch()
+
+    const categories = await Category.all()
+
+    return view.render('product_detail', {
+      product: productData,
+      relateds: relateds.toJSON().map((r) => ({
+        ...r,
+        price: this.formatCurrency('es-CO', 'COP', 0, r.price)
+      })),
+      categories: categories.toJSON()
+    })
+  }
+
+  async bycat ({ params, view }) {
+    const category = await Category.find(params.id)
+    const categoryName = category ? category.name : ''
+
+    const products = await Product.query()
+      .where('father', '=', categoryName)
+      .orWhere('category', 'LIKE', `%${categoryName}%`)
+      .fetch()
+
+    const categories2 = await Product.query().pluck('father').groupBy('father')
+
+    const productsFormatted = products.toJSON().map((p) => ({
+      ...p,
+      price: this.formatCurrency('es-CO', 'COP', 0, p.price)
+    }))
+
+    return view.render('products_list', {
+      products: productsFormatted,
+      category: category ? category.toJSON() : { name: 'Catálogo' },
+      categories: categories2
+    })
+  }
+
+  async bycatmenu ({ params, view }) {
+    const categoryName = (params.name || '').replace(/%20/g, ' ')
+    const products = await Product.query()
+      .where('category', 'LIKE', `%${categoryName}%`)
+      .orWhere('father', 'LIKE', `%${categoryName}%`)
+      .fetch()
+
+    const category = await Category.query()
+      .where('name', 'LIKE', `%${categoryName}%`)
+      .first()
+
+    const categories2 = await Product.query().pluck('father').groupBy('father')
+
+    const productsFormatted = products.toJSON().map((p) => ({
+      ...p,
+      price: this.formatCurrency('es-CO', 'COP', 0, p.price)
+    }))
+
+    return view.render('products_list', {
+      products: productsFormatted,
+      category: category ? category.toJSON() : { name: categoryName },
+      categories: categories2
+    })
+  }
+
+  async search ({ request, view }) {
+    const searchParams = request.get()
+    let sortparam = 'asc'
+    let sortname = 'name'
+
+    if (searchParams.sort) {
+      switch (searchParams.sort) {
+        case 'pricedesc':
+          sortparam = 'desc'
+          sortname = 'price'
+          break
+        case 'priceasc':
+          sortparam = 'asc'
+          sortname = 'price'
+          break
+        case 'alphadesc':
+          sortparam = 'desc'
+          sortname = 'name'
+          break
+        case 'alphaasc':
+          sortparam = 'asc'
+          sortname = 'name'
+          break
+        default:
+          sortparam = 'asc'
+          sortname = 'name'
+          break
       }
-      formatCurrency (locales, currency, fractionDigits, number) {
-        var formatted = new Intl.NumberFormat(locales, {
-          style: 'currency',
-          currency: currency,
-          minimumFractionDigits: fractionDigits
-        }).format(number);
-        return formatted;
+    }
+
+    let query = Product.query().orderBy(sortname, sortparam)
+
+    if (searchParams.name) {
+      query = query.where('name', 'LIKE', `%${searchParams.name}%`)
+    }
+
+    if (searchParams.category) {
+      query = query.where('category', '=', searchParams.category)
+    }
+
+    if (searchParams.prices) {
+      const priceFilter = parseInt(searchParams.prices, 10)
+      switch (priceFilter) {
+        case 1:
+          query = query.whereBetween('price', [0, 50000])
+          break
+        case 2:
+          query = query.whereBetween('price', [50000, 150000])
+          break
+        case 3:
+          query = query.whereBetween('price', [150000, 300000])
+          break
+        case 4:
+          query = query.where('price', '>', 300000)
+          break
       }
-  
-      async search({request, response,params, view})
-      {
-        var products = []
-        var products2 = []
-        var category = []
-      
-        var sortparam="asc"
-        var sortname="name"
+    }
 
-        var products = await Product.all()
-        products = products.toJSON()
-        
-        if(request.get().sort)
-        {
-          switch (request.get().sort) {
-            case "pricedesc":
-              sortparam="desc"
-              sortname="price"
-            break;
-            case "priceasc":
-              sortparam="asc"
-              sortname="price"
-            break;
-            case "alphadesc":
-              sortparam="desc"
-              sortname="name"
-            break;
-            case "alphaasc":
-              sortparam="asc"
-              sortname="name"
-            break;   
-            default:
-              sortparam="asc"
-              sortname="name"
-              break;
-          }
-          products = await Product.query().orderBy(sortname,sortparam).fetch()
-        }
-        if(request.get().father)//Por categoria padre
-        {
-          products = await Product.query().where("father","LIKE","%"+request.get().father+"%").orderBy(sortname,sortparam).fetch()
-          category.name="Busqueda"
-        }
-        
-        if(request.get().name)//Busqueda por nombre
-        {
-          
-          products = await Product.query().where("name","LIKE","%"+request.get().name+"%").orderBy(sortname,sortparam).fetch()
-          category.name="Busqueda"
-          
-        }
-        if(request.get().category)//Filtro por categoría
-        {
-          products = JSON.parse(JSON.stringify(products)).filter((item) => {
-            return item.category.toLowerCase() == request.get().category.toLowerCase();    
-          });          
-          category.name = request.get().category
-        }
-        
-        if(request.get().min)//Filtro menor precio
-        {
-          products = JSON.parse(JSON.stringify(products)).filter((item) => {
-            return item.price >= request.get().min;    
-          });
-        }
-        if(request.get().max)//Filtro mayor precio
-        {
-          products = JSON.parse(JSON.stringify(products)).filter((item) => {
-            return item.price <= request.get().max;
-          });
-        }
-        let father = "";
-        try{
-          for(const product of products.toJSON())
-          {
-            father = product.father;
-            product.price=this.formatCurrency("es-CO", "COP", 0, product.price);
-            products2.push(product)
-          }
-        }catch(Exception)
-        {
-          for(const product of products)
-          {
-            father = product.father;
-            product.price=this.formatCurrency("es-CO", "COP", 0, product.price);
-            products2.push(product)
-          }
-        }
+    const products = await query.fetch()
+    const categories2 = await Product.query().pluck('father').groupBy('father')
 
+    const productsFormatted = products.toJSON().map((p) => ({
+      ...p,
+      price: this.formatCurrency('es-CO', 'COP', 0, p.price)
+    }))
 
-        
-        const categories2 = await Product.query().where("father",father).pluck('category').groupBy('category')
-        const categories = await Category.all()
-        return view.render('products_list', { products: products2, category: category, categories: categories2 })
+    return view.render('products_list', {
+      products: productsFormatted,
+      category: { name: searchParams.name ? `Búsqueda: "${searchParams.name}"` : 'Todos los productos' },
+      categories: categories2
+    })
+  }
+
+  async get ({ request, response }) {
+    const id = request.input('id')
+    const product = await Product.find(id)
+    if (!product) {
+      return response.status(404).json({ error: 'Producto no encontrado' })
+    }
+    return response.json(product)
+  }
+
+  async cart ({ view }) {
+    return view.render('cart')
+  }
+
+  async checkout ({ request, view }) {
+    const rawCart = request.input('CART') || '{"cart":[]}'
+    let parsedCart = { cart: [] }
+    try {
+      parsedCart = typeof rawCart === 'string' ? JSON.parse(rawCart) : rawCart
+    } catch (e) {
+      parsedCart = { cart: [] }
+    }
+
+    const items = []
+    let total = 0
+
+    if (Array.isArray(parsedCart.cart)) {
+      for (const item of parsedCart.cart) {
+        const product = await Product.find(parseInt(item.Product, 10))
+        if (product) {
+          const qty = parseInt(item.Quantity, 10) || 1
+          const linePrice = qty * parseInt(product.price, 10)
+          total += linePrice
+          items.push({
+            id: product.id,
+            name: product.name,
+            code: product.code,
+            quantity: qty,
+            price: linePrice,
+            prettyprice: this.formatCurrency('es-CO', 'COP', 0, linePrice)
+          })
+        }
       }
-      
-      async cart({request, response, view})
-      {        
-        return view.render("cart");
-      }
+    }
 
-      async get({request, response, params})
-      {
-        const id=request.input("id");
-        //console.log("llegó: "+id)
-        const product=await Product.find(id)
-        product.price2=this.formatCurrency("es-CO", "COP", 0, product.price);
-        
-        var product2={}
-        product2.id=product.id
-        product2.name=product.name
-        product2.code=product.code
-        product2.category=product.category
-        product2.price=product.price
-        product2.short_description=product.short_description
-        product2.long_description=product.long_description
+    const shipping = 0
+    const prettyprices = {
+      subtotal: this.formatCurrency('es-CO', 'COP', 0, total),
+      shipping: this.formatCurrency('es-CO', 'COP', 0, shipping),
+      total: this.formatCurrency('es-CO', 'COP', 0, total + shipping)
+    }
 
-        const axios = use('axios');        
-        return product
-      }
-      
-      async checkout({request, response, view})
-      {
-        var cart=request.input("CART")
-        var shipping = 1700
-        const originalcart=cart
-        cart=JSON.parse(cart)
-        var products =[]
-        var total=0
-        for(const cart2 of cart.cart)
-        {
-          const product=await Product.findOrFail(parseInt(cart2.Product))
-          var carrito={}
-          carrito.id=product.id
-          carrito.name=product.name
-          carrito.code=product.code
-          carrito.quantity=cart2.Quantity
-          carrito.price=parseInt(carrito.quantity)*parseInt(product.price)
-          carrito.prettyprice=this.formatCurrency("es-CO", "COP", 0, carrito.price)
-          total=total+parseInt(carrito.price)
-          products.push(carrito)
-        }
-        var prettyprices={}
-        prettyprices.subtotal=this.formatCurrency("es-CO", "COP", 0,total)
-        prettyprices.shipping=this.formatCurrency("es-CO", "COP", 0, shipping)
-        prettyprices.total=this.formatCurrency("es-CO", "COP", 0,total+shipping)
+    const prices = {
+      subtotal: total,
+      shipping: shipping,
+      total: total + shipping
+    }
 
-        var prices={}
-        prices.subtotal=prices.subtotal+total
-        prices.shipping= shipping
-        prices.total=total
-        
-        return view.render("checkout", {cart: products, prices: prices, prettyprices:prettyprices, originalcart: originalcart});
-      }
+    return view.render('checkout', {
+      cart: items,
+      prices: prices,
+      prettyprices: prettyprices,
+      originalcart: rawCart
+    })
+  }
 
-      async pay({request, response, view})
-      {
-        const email=request.input("EMAIL")
-        
-        try{
-          var client=await Client.findBy("email",email)
-          var client2 = await Client.find(client.id)
-          client2.name=request.input("NAME")
-          client2.phone=request.input("PHONE")
-          client2.address=request.input("ADDRESS")
-          client2.city=request.input("CITY")
-          client2.country=request.input("COUNTRY")
-          await client2.save()
-          console.log("Actualizando cliente")
-        }catch(e)
-        {
-          var client = await new Client()
-          client.name=request.input("NAME")
-          client.email=email
-          client.phone=request.input("PHONE")
-          client.address=request.input("ADDRESS")
-          client.city=request.input("CITY")
-          client.country=request.input("COUNTRY")
-          await client.save()
-          console.log("Creado cliente nuevo")          
-        }
+  async pay ({ request, response, view }) {
+    const email = request.input('EMAIL')
+    let client
 
-        var cart=request.input("CART")
-        cart=JSON.parse(cart)
-        var shipping = 1700
-        //var products =[]
-        //var total=0
-
-        var order= await new Order()
-        order.client_id=client.id
-        order.status="pending"
-        order.value=0
-        await order.save()
-        console.log("Creada Orden")
-        var prods="";
-        for(const cart2 of cart.cart)
-        {
-          const orderProduct=await new OrderProduct()
-          const product=await Product.findOrFail(parseInt(cart2.Product))
-          orderProduct.order_id=order.id
-          orderProduct.product_id=product.id
-          orderProduct.quantity=cart2.Quantity
-          prods+=product.name+": $"+product.price+" x"+orderProduct.quantity+" - "
-          order.value=parseInt(order.value)+parseInt(product.price)*parseInt(cart2.Quantity)
-          await orderProduct.save()
-          console.log("Agregado producto a Orden")
-        }
-
-        prods+=" Total: $" + order.value + " + Envío: $"+shipping
-
-        if (request.input("COUPON")){
-          try{
-            
-          console.log("Cupón de descuento!")
-          var coupon = await Coupon.query().where("code", request.input("COUPON")).andWhere("status","=", "active").firstOrFail();
-          coupon.status = "used";
-          await coupon.save();
-
-          prods += " / Cupón de descuento aplicado: "+request.input("COUPON")+" - "+coupon.discount+"%";
-          
-          order.value = order.value-(order.value*coupon.discount/100)
-          await order.save();
-
-          prods += " / Total después de descuento: $"+order.value
-          }catch(Exception)
-          {
-
-          }
-        }
-        order.details = prods;
-
-        order.value += shipping
-
-        await order.save();
-        
-        console.log("Proceso completo")
-
-        const Mail = use('Mail')
-        await Mail.send('emails.order', {order: order.toJSON(), prods: prods}, (message) => {
-          message
-            .to(email)
-            .from('no-reply@boutiqueathenea.co')
-            .subject('Confirmación de pedido')
-            console.log("Enviado Correo")
+    try {
+      client = await Client.findBy('email', email)
+      if (client) {
+        client.name = request.input('NAME') || client.name
+        client.phone = request.input('PHONE') || client.phone
+        client.address = request.input('ADDRESS') || client.address
+        client.city = request.input('CITY') || client.city
+        client.country = request.input('COUNTRY') || client.country
+        await client.save()
+      } else {
+        client = await Client.create({
+          name: request.input('NAME'),
+          email: email,
+          phone: request.input('PHONE'),
+          address: request.input('ADDRESS'),
+          city: request.input('CITY'),
+          country: request.input('COUNTRY')
         })
-        console.log("Inicia proceso de pago")
-        if (request.input("payment_type") == "cash_on_delivery")
-        {
-          order.gateway = "Contraentrega";
-          await order.save()
-          return view.render('order_completed')
-        }else
-        {  
-          //INICIO PAYU
-          var md5 = require('md5');
+      }
+    } catch (e) {
+      client = await Client.create({
+        name: request.input('NAME') || 'Cliente',
+        email: email || `cliente_${Date.now()}@boutique-platform.com`,
+        phone: request.input('PHONE'),
+        address: request.input('ADDRESS'),
+        city: request.input('CITY'),
+        country: request.input('COUNTRY')
+      })
+    }
 
-          const api_key = "SANDBOX_PAYU_API_KEY";
-          const merchant_id = "904382";
-          var reference_code = order.id;
-          var amount = order.value;
-          const currency = "COP"
-          var signature = md5(api_key+"~"+merchant_id+"~"+reference_code+"~"+amount+"~"+currency);
+    const rawCart = request.input('CART') || '{"cart":[]}'
+    let parsedCart = { cart: [] }
+    try {
+      parsedCart = typeof rawCart === 'string' ? JSON.parse(rawCart) : rawCart
+    } catch (e) {
+      parsedCart = { cart: [] }
+    }
 
-          var payu = {
-            "url" : "https://checkout.payulatam.com/ppp-web-gateway-payu/",
-            "merchantId" : merchant_id,
-            "accountId" : "911077",
-            "description" : prods,
-            "referenceCode" : order.id,
-            "amount" : order.value,
-            "tax" : "0",
-            "taxReturnBase" : "0",
-            "currency" : "COP",
-            "signature" : signature,
-            "test" : "0",
-            "buyerEmail" : email,
-            "responseUrl" : "https://boutiqueathenea.co/pay",
-            "confirmationUrl" : "https://boutiqueathenea.co/pay",
+    const order = await Order.create({
+      client_id: client.id,
+      status: 'pending',
+      value: '0',
+      gateway: request.input('payment_type') || 'Contraentrega'
+    })
 
-            "shippingAddress" : "calle 93 n 47 - 65",
-            "shippingCity" : "Bogota",
-            "shippingCountry" : "CO",
-          }
+    let orderTotal = 0
+    let prodsSummary = ''
 
-          return view.render('order_completed_payu',{payu: payu})
-          //FIN PAYU
-          //INICIO CREDIBANCO
-          /*const axios = require('axios');
-          var FormData = require('form-data');
-          
-          var bodyFormData = new FormData();
-          bodyFormData.append('userName', 'GATEWAY_USERNAME');
-          bodyFormData.append('password', 'GATEWAY_PASSWORD');
-          bodyFormData.append('orderNumber', order.id);
-          bodyFormData.append('amount',  order.value+"00");
-          bodyFormData.append('returnUrl', "https://boutiqueathenea.co/pay");
-          bodyFormData.append('description', prods);
+    if (Array.isArray(parsedCart.cart)) {
+      for (const item of parsedCart.cart) {
+        const product = await Product.find(parseInt(item.Product, 10))
+        if (product) {
+          const qty = parseInt(item.Quantity, 10) || 1
+          const lineTotal = parseInt(product.price, 10) * qty
+          orderTotal += lineTotal
 
-          await axios({
-            method: 'post',
-            url: 'https://ecouat.credibanco.com/payment/rest/register.do',
-            data: bodyFormData,
-            headers: {
-              'content-type': `multipart/form-data; boundary=${bodyFormData._boundary}`,
-              }
+          await OrderProduct.create({
+            order_id: order.id,
+            product_id: product.id,
+            quantity: qty
           })
-          .then(function (res) {
-            console.log("Pasarela");
-            order.gateway=res.data.orderId
-            order.save()
-            return response.redirect(res.data.formUrl)
-          })
-          .catch(function (error) {
-            console.log("Error"+error);
-            return response.redirect("/")
-          });*/
-          //FIN CREDIBANCO
+
+          prodsSummary += `${product.name} (x${qty}) - `
         }
       }
-      async pay2({request, response, view})
-      {
-        return view.render('order_completed')
+    }
+
+    // Process coupon discount if provided
+    if (request.input('COUPON')) {
+      try {
+        const coupon = await Coupon.query()
+          .where('code', request.input('COUPON'))
+          .where('status', 'active')
+          .firstOrFail()
+
+        coupon.status = 'used'
+        await coupon.save()
+
+        const discountAmount = Math.round((orderTotal * coupon.discount) / 100)
+        orderTotal -= discountAmount
+        prodsSummary += ` [Cupón: ${coupon.code} -${coupon.discount}%]`
+      } catch (couponErr) {
+        // Continue without discount if coupon is invalid
       }
+    }
+
+    order.value = String(orderTotal)
+    order.details = prodsSummary
+    await order.save()
+
+    // Transactional confirmation email
+    try {
+      const Mail = use('Mail')
+      await Mail.send('emails.order', { order: order.toJSON(), prods: prodsSummary }, (message) => {
+        message
+          .to(email)
+          .from(Env.get('MAIL_FROM', 'no-reply@boutique-platform.com'))
+          .subject(`Confirmación de pedido #${order.id} - Fashion Boutique`)
+      })
+    } catch (mailError) {
+      // Graceful fallback when mail server is unreachable
+    }
+
+    // PayU Web Gateway Integration (Sandbox / Production)
+    if (request.input('payment_type') === 'payu' && Env.get('ENABLE_PAYU', false)) {
+      const apiKey = Env.get('PAYU_API_KEY', 'SANDBOX_PAYU_KEY')
+      const merchantId = Env.get('PAYU_MERCHANT_ID', 'SANDBOX_MERCHANT')
+      const referenceCode = String(order.id)
+      const amount = order.value
+      const currency = 'COP'
+      const signature = crypto
+        .createHash('md5')
+        .update(`${apiKey}~${merchantId}~${referenceCode}~${amount}~${currency}`)
+        .digest('hex')
+
+      const payu = {
+        url: Env.get('PAYU_URL', 'https://sandbox.checkout.payulatam.com/ppp-web-gateway-payu/'),
+        merchantId: merchantId,
+        accountId: Env.get('PAYU_ACCOUNT_ID', 'SANDBOX_ACCOUNT'),
+        description: prodsSummary,
+        referenceCode: order.id,
+        amount: order.value,
+        tax: '0',
+        taxReturnBase: '0',
+        currency: currency,
+        signature: signature,
+        test: Env.get('PAYU_TEST_MODE', '1'),
+        buyerEmail: email,
+        responseUrl: `${Env.get('APP_URL', 'http://127.0.0.1:3333')}/confirm`,
+        confirmationUrl: `${Env.get('APP_URL', 'http://127.0.0.1:3333')}/confirm`,
+        shippingAddress: request.input('ADDRESS') || 'Bogotá',
+        shippingCity: request.input('CITY') || 'Bogotá',
+        shippingCountry: 'CO'
+      }
+
+      return view.render('order_completed_payu', { payu })
+    }
+
+    return response.redirect('/confirm')
+  }
+
+  async pay2 ({ view }) {
+    return view.render('order_completed')
+  }
 }
+
 module.exports = ProductController
