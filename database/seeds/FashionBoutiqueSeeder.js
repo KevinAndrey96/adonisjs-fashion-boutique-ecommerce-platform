@@ -21,11 +21,11 @@ const Coupon = use('App/Models/Coupon')
 class FashionBoutiqueSeeder {
   async run () {
     // 1. Seed Admin User
-    const adminExists = await User.findBy('email', 'admin@boutique-platform.com')
+    const adminExists = await User.findBy('email', 'admin@example.com')
     if (!adminExists) {
       await User.create({
         username: 'admin',
-        email: 'admin@boutique-platform.com',
+        email: 'admin@example.com',
         password: 'BoutiqueAdmin2026!'
       })
     }
@@ -191,11 +191,11 @@ class FashionBoutiqueSeeder {
     }
 
     // 5. Seed Demo Client
-    let client = await Client.findBy('email', 'cliente@boutique-platform.com')
+    let client = await Client.findBy('email', 'cliente@example.com')
     if (!client) {
       client = await Client.create({
         name: 'Valentina Restrepo',
-        email: 'cliente@boutique-platform.com',
+        email: 'cliente@example.com',
         phone: '+57 301 234 5678',
         address: 'Carrera 7 # 116-50, Apto 804',
         city: 'Bogotá',

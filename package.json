@@ -1,13 +1,14 @@
 {
-  "name": "fashion-boutique-ecommerce-platform",
+  "name": "adonisjs-fashion-boutique-ecommerce-platform",
   "version": "1.0.0",
   "adonis-version": "4.1.0",
-  "description": "Full-stack fashion boutique, apparel & lingerie e-commerce platform with inventory management backoffice built with Node.js and AdonisJS",
+  "description": "Tienda en línea de moda, lencería y ropa con backoffice de inventario y pedidos, construida con AdonisJS 4 y MySQL.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "adonis serve --dev",
-    "test": "node ace test"
+    "lint": "eslint .",
+    "test": "node test/smoke.js"
   },
   "keywords": [
     "fashion",
@@ -24,8 +25,8 @@
     "docker"
   ],
   "author": "Kevin Andrey Herrera Silva <kahs_kevin@hotmail.com>",
-  "license": "MIT",
-  "private": false,
+  "license": "UNLICENSED",
+  "private": true,
   "dependencies": {
     "@adonisjs/ace": "^5.0.8",
     "@adonisjs/auth": "^3.0.7",
@@ -38,14 +39,18 @@
     "@adonisjs/mail": "^3.0.10",
     "@adonisjs/session": "^1.0.27",
     "@adonisjs/shield": "^1.0.8",
-    "axios": "^0.27.2",
-    "form-data": "^4.0.0",
     "mysql": "^2.18.1",
-    "objection": "^2.2.2",
     "sqlite3": "^5.1.7"
   },
-  "devDependencies": {},
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.15.0",
+    "globals": "^17.14.0"
+  },
   "autoload": {
     "App": "./app"
+  },
+  "engines": {
+    "node": ">=18"
   }
 }

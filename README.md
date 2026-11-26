@@ -1,201 +1,112 @@
-# 👗 Fashion Boutique E-Commerce Platform & Backoffice System
+# Tienda en línea de moda y lencería con backoffice (AdonisJS)
 
-[![CI - Build, Test & Verify](https://github.com/KevinAndrey96/fashion-boutique-ecommerce-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/KevinAndrey96/fashion-boutique-ecommerce-platform/actions/workflows/ci.yml)
-[![Node.js Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org/)
-[![AdonisJS](https://img.shields.io/badge/framework-AdonisJS%20v4.1-5A45FF.svg)](https://adonisjs.com/)
-[![Database](https://img.shields.io/badge/database-MySQL%208.0%20%7C%20SQLite3-00758F.svg)](https://www.mysql.com/)
-[![Docker](https://img.shields.io/badge/docker-ready-2496ED.svg)](https://www.docker.com/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![CI](https://github.com/KevinAndrey96/adonisjs-fashion-boutique-ecommerce-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/KevinAndrey96/adonisjs-fashion-boutique-ecommerce-platform/actions/workflows/ci.yml)
+![Node.js 18 a 22](https://img.shields.io/badge/Node.js-18%20%7C%2020%20%7C%2022-339933?logo=nodedotjs&logoColor=white)
+![AdonisJS 4](https://img.shields.io/badge/AdonisJS-4.1-5A45FF?logo=adonisjs&logoColor=white)
+![MySQL y SQLite](https://img.shields.io/badge/MySQL%208.0%20%7C%20SQLite-4479A1?logo=mysql&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
 
-A full-stack e-commerce platform and inventory management backoffice for women's fashion, apparel, and lingerie, built with **Node.js**, **AdonisJS**, **Lucid ORM**, **Edge Templates**, and **MySQL/SQLite**.
+Tienda en línea para una boutique colombiana de ropa femenina, lencería y accesorios, con su backoffice de inventario y pedidos. Se construyó en 2020 con AdonisJS 4, Edge y Lucid; los clientes compran sin crear cuenta y pagan contraentrega o con PayU.
 
----
+## Funcionalidades
 
-## 🏛️ Architecture Overview
+**Tienda**
 
-The platform unifies a customer-facing fashion storefront and an administrative backoffice into a modular monorepo:
+- Portada con colecciones (bodys, panties, brasieres, lencería y accesorios), categorías y detalle de producto con relacionados.
+- Búsqueda por nombre y categoría, filtros por rango de precio y orden por precio o nombre.
+- Carrito en el navegador. El checkout recalcula cada línea con el precio de la base de datos, nunca con el que envía el navegador, y limita las cantidades a 1..20.
+- Pago contraentrega o con el formulario web de PayU, firmado con MD5 según su especificación y activado solo con `ENABLE_PAYU=true`.
+- Cupones de descuento de un solo uso, boletín que envía un cupón de bienvenida y correo de confirmación del pedido.
+
+**Backoffice** (`/admin`, con sesión)
+
+- Productos y categorías con imagen; solo se aceptan PNG, JPG o GIF de hasta 10 MB, guardadas con nombre fijo por id.
+- Pedidos con detalle de productos y cliente, y listado de clientes.
+- Los visitantes sin sesión se redirigen al login, y todos los formularios llevan token CSRF (Shield).
+
+## Arquitectura
 
 ```mermaid
-flowchart TD
-    subgraph ClientLayer["Frontend Presentation Layer"]
-        A["Customer Web Storefront<br/>(Bootstrap, OwlCarousel, Edge Views)"]
-        B["Admin Backoffice Portal<br/>(Chart.js, DataTables, Admin Views)"]
-    end
-
-    subgraph RoutingLayer["AdonisJS Routing & Security"]
-        C["Storefront Routes (/)"]
-        D["Admin Routes (/admin/*)"]
-        AUTH["Auth Middleware (Sessions & CSRF Shield)"]
-    end
-
-    subgraph ControllersLayer["HTTP Controllers & Services"]
-        E["Storefront Controllers<br/>IndexController, ProductController, CouponController, NewsletterController"]
-        F["Admin Controllers<br/>UserController, ProductController, CategoryController, OrderController"]
-    end
-
-    subgraph DataLayer["Persistence & Infrastructure"]
-        G["Lucid ORM Models<br/>(User, Product, Category, Order, OrderProduct, Client, Coupon, Newsletter)"]
-        H[("Database Engine<br/>MySQL 8.0 / SQLite 3")]
-        I["Mailpit SMTP (Transactional Emails)"]
-        J["PayU Web Gateway (Sandbox / Production)"]
-    end
-
-    A --> C
-    B --> AUTH --> D
-    C --> E
-    D --> F
-    E --> G
-    F --> G
-    G --> H
-    E -.-> I
-    E -.-> J
+flowchart LR
+    Cliente -->|tienda| Rutas[start/routes.js]
+    Admin[Administrador] -->|/admin con sesión| Rutas
+    Rutas --> Tienda[Index, Product, Coupon, Newsletter]
+    Rutas --> Backoffice[Admin: Product, Category, Order, Client, User]
+    Tienda --> Servicios[Services: Cart y Money]
+    Tienda --> Modelos[Lucid: Product, Category, Order, Client, Coupon]
+    Backoffice --> Modelos
+    Modelos --> BD[(MySQL 8.0 o SQLite)]
+    Tienda -.->|correo| SMTP[Mailpit o SMTP]
+    Tienda -.->|formulario firmado| PayU
 ```
 
----
+- `app/Services/Cart.js` interpreta el carrito y lo resuelve contra el catálogo.
+- `app/Services/Money.js` formatea pesos colombianos para todas las vistas.
+- `app/Exceptions/Handler.js` redirige al login cuando falta la sesión en el backoffice.
 
-## ✨ Features
+## Puesta en marcha
 
-### 🛍️ Customer Storefront (`/`)
-- **Responsive Boutique Catalog:** Elegant showcase for dresses, bodys, lingerie, and accessories with dynamic carousels.
-- **Search & Filter:** Instant search by product name, price brackets, and category hierarchies.
-- **Coupons & Promotions Engine:** Real-time coupon code validation with automatic percentage discounts on cart totals.
-- **Newsletter Subscription:** Automated customer onboarding that creates a unique 10% welcome coupon and sends notification emails.
-- **Shopping Cart & Checkout:** Persistent client-side cart, customer profile auto-resolution, cash on delivery, and PayU integration.
-
-### 📊 Admin Backoffice (`/admin`)
-- **Secured Authentication:** Protected administrative routes with bcrypt password hashing.
-- **Analytics Dashboard:** Performance cards (visits, orders, newsletter subscribers, conversion rate) and sales trend charts.
-- **Product Inventory Management:** Full CRUD with multipart image uploads, category assignment, SKUs, and price formatting.
-- **Category Hierarchy:** Manage root categories and nested sub-classifications.
-- **Order & Invoice Tracking:** Real-time visibility into customer orders, line items, applied coupons, and dispatch status.
-- **Customer CRM:** Centralized client directory with contact and delivery details.
-
----
-
-## 🚀 Quickstart
-
-### Option 1: Docker Compose (Recommended)
-
-Run the full stack (Application, MySQL 8.0, and Mailpit) in seconds:
+### Local con SQLite
 
 ```bash
-# 1. Clone the repository
-git clone git@github.com:KevinAndrey96/fashion-boutique-ecommerce-platform.git
-cd fashion-boutique-ecommerce-platform
+npm ci --legacy-peer-deps
+cp .env.example .env
+node ace key:generate
+node ace migration:run
+node ace seed
+npm run dev        # http://127.0.0.1:3333
+```
 
-# 2. Start services via Docker Compose
+### Docker Compose (MySQL y Mailpit)
+
+```bash
+export APP_KEY=$(openssl rand -hex 16)
 docker compose up -d --build
-
-# 3. Access endpoints
-# Storefront:        http://localhost:3333
-# Admin Backoffice:  http://localhost:3333/admin/login
-# Mailpit Web UI:    http://localhost:8025
+docker compose exec app node ace migration:run --force
+docker compose exec app node ace seed --force
 ```
 
----
+- Tienda: http://localhost:3333
+- Mailpit: http://localhost:8025
 
-### Option 2: Local Development (Zero-Config SQLite)
+La imagen corre como el usuario `node`, sin privilegios, y tiene healthcheck. El compose exige `APP_KEY`: no trae una clave por defecto.
+
+### Datos de demostración
+
+El seeder crea categorías, productos, un cupón y el usuario `admin@example.com` con la contraseña `BoutiqueAdmin2026!`, solo para el entorno local.
+
+## Calidad
 
 ```bash
-# 1. Setup environment & install dependencies
-make setup
-
-# 2. Run database migrations
-make migrate
-
-# 3. Seed realistic boutique catalog & test accounts
-make seed
-
-# 4. Start the development server
-make dev
+npm run lint   # ESLint
+npm test       # pruebas HTTP con node:test
 ```
 
-Visit [http://127.0.0.1:3333](http://127.0.0.1:3333) in your browser.
+Las pruebas levantan el servidor real sobre la base SQLite sembrada y revisan:
 
----
+- que las páginas de la tienda carguen;
+- los endpoints JSON del carrito;
+- los 404;
+- la redirección del backoffice al login;
+- el rechazo de un POST sin token CSRF;
+- una compra completa con token CSRF, que confirma que el pedido usa el precio de la base, limita la cantidad e ignora productos inexistentes.
 
-## 🔐 Demo Credentials & Coupons
+El CI corre lint y pruebas en Node 18, 20 y 22, construye la imagen Docker y espera a que el contenedor quede saludable.
 
-When running `make seed`, the following test accounts and discount codes are available:
+## Historia
 
-| Role | Email | Password | Access URL |
-| :--- | :--- | :--- | :--- |
-| **Administrator** | `admin@boutique-platform.com` | `BoutiqueAdmin2026!` | `/admin/login` |
-| **Customer** | `cliente@boutique-platform.com` | *(N/A - Direct Checkout)* | `/` |
+Proyecto de 2020 y 2021 para una boutique de Bogotá. En noviembre de 2026 se ordenó sin cambiar el stack:
 
-### Available Test Coupons
-- `BIENVENIDA10`: 10% discount on entire cart
-- `BLACKFRIDAY20`: 20% discount on entire cart
-- `VIPFASHION15`: 15% discount on entire cart
+- el servidor ya no intenta leer certificados inexistentes al arrancar (fallaba con ENOENT);
+- PayU queda apagado de verdad cuando `ENABLE_PAYU` no es `true` (antes la cadena `"false"` lo activaba);
+- las cantidades negativas o enormes ya no alteran el total;
+- los correos que fallan quedan registrados en el log en lugar de silenciarse;
+- la lógica repetida de carrito y moneda pasó a dos servicios;
+- se eliminaron dependencias sin uso;
+- el lockfile se regeneró, la imagen Docker corre sin root y se agregaron ESLint, pruebas y CI.
 
----
+Las credenciales que alguna vez estuvieron en el código se purgaron del historial.
 
-## 📁 Project Structure
+## Licencia
 
-```
-fashion-boutique-ecommerce-platform/
-├── app/
-│   ├── Controllers/
-│   │   └── Http/
-│   │       ├── IndexController.js        # Storefront home & categories
-│   │       ├── ProductController.js      # Storefront products & checkout
-│   │       ├── ClientController.js       # Customer lookup
-│   │       ├── CouponController.js       # Discount coupon validation
-│   │       ├── NewsletterController.js   # Newsletter subscription & coupon generation
-│   │       └── Admin/                    # Admin Backoffice Controllers
-│   │           ├── UserController.js     # Admin auth (login/logout)
-│   │           ├── ProductController.js  # Product inventory CRUD & uploads
-│   │           ├── CategoryController.js # Category management
-│   │           ├── OrderController.js    # Order tracking & invoice detail
-│   │           └── ClientController.js   # Customer directory
-│   ├── Middleware/                       # Framework & auth middleware
-│   └── Models/                           # Lucid ORM Entity Models
-│       ├── User.js
-│       ├── Product.js
-│       ├── Category.js
-│       ├── Order.js
-│       ├── OrderProduct.js
-│       ├── Client.js
-│       ├── Coupon.js
-│       └── Newsletter.js
-├── config/                               # AdonisJS service configurations
-├── database/
-│   ├── migrations/                       # DDL schema migrations (11 tables)
-│   └── seeds/                            # Realistic boutique catalog seeders
-├── public/                               # Public assets (Storefront & Admin)
-├── resources/
-│   └── views/
-│       ├── layouts/                      # Storefront master layout
-│       ├── admin/                        # Admin backoffice templates
-│       │   ├── layouts/                  # Admin master layout & navigation
-│       │   ├── dashboard.edge            # Metrics & sales trend charts
-│       │   ├── products.edge             # Product table & actions
-│       │   └── orders.edge               # Orders management
-│       └── *.edge                        # Storefront views (index, cart, checkout)
-├── start/
-│   └── routes.js                         # Unified route definitions
-├── docker-compose.yml                    # Multi-container orchestration
-├── Dockerfile                            # Optimized Node.js Alpine image
-├── Makefile                              # Developer convenience targets
-└── README.md
-```
-
----
-
-## 🧪 Testing & Verification
-
-Run syntax and static verification across all models, controllers, and routes:
-
-```bash
-make test
-```
-
----
-
-## 📄 License
-
-Distributed under the MIT License. See [LICENSE](LICENSE) for more information.
-
----
-
-**Developed & Architected by [Kevin Andrey Herrera Silva](https://github.com/KevinAndrey96)**
+Sin licencia de código abierto. El proyecto nació como trabajo para un cliente y se publica como muestra de portafolio: todos los derechos reservados.

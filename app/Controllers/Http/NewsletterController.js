@@ -3,6 +3,7 @@
 const Newsletter = use('App/Models/Newsletter')
 const Coupon = use('App/Models/Coupon')
 const Env = use('Env')
+const Logger = use('Logger')
 
 class NewsletterController {
   async store ({ request, response, session }) {
@@ -21,11 +22,11 @@ class NewsletterController {
         await Mail.send('emails.coupon', { coupon: coupon.toJSON() }, (message) => {
           message
             .to(userData.email)
-            .from(Env.get('MAIL_FROM', 'no-reply@boutique-platform.com'))
+            .from(Env.get('MAIL_FROM', 'no-reply@example.com'))
             .subject('¡Bienvenida a Fashion Boutique! Tu cupón de descuento')
         })
       } catch (mailError) {
-        // Fallback when mail server is offline
+        Logger.warning('newsletter coupon email not sent: %s', mailError.message)
       }
 
       session.flash({

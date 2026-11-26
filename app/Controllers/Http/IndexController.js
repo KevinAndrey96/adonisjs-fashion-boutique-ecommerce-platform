@@ -2,16 +2,9 @@
 
 const Product = use('App/Models/Product')
 const Category = use('App/Models/Category')
+const { withCopPrices } = use('App/Services/Money')
 
 class IndexController {
-  formatCurrency (locales, currency, fractionDigits, number) {
-    return new Intl.NumberFormat(locales, {
-      style: 'currency',
-      currency: currency,
-      minimumFractionDigits: fractionDigits
-    }).format(number || 0)
-  }
-
   async index ({ view }) {
     const fetchCategoryProducts = async (term) => {
       let prods = await Product.query()
@@ -24,10 +17,7 @@ class IndexController {
         prods = await Product.query().limit(8).fetch()
       }
 
-      return prods.toJSON().map((prod) => ({
-        ...prod,
-        price: this.formatCurrency('es-CO', 'COP', 0, prod.price)
-      }))
+      return withCopPrices(prods.toJSON())
     }
 
     const [cats1, cats2, cats3, cats4, cats5, categories] = await Promise.all([
