@@ -36,7 +36,7 @@ jobs:
       - name: Preparar entorno y base SQLite
         run: |
           cp .env.example .env
-          node ace key:generate
+          sed -i "s/^APP_KEY=.*/APP_KEY=$(openssl rand -hex 16)/" .env
           node ace migration:run --force
           node ace seed --force
 

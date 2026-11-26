@@ -51,7 +51,7 @@ flowchart LR
 ```bash
 npm ci --legacy-peer-deps
 cp .env.example .env
-node ace key:generate
+sed -i.bak "s/^APP_KEY=.*/APP_KEY=$(openssl rand -hex 16)/" .env && rm .env.bak
 node ace migration:run
 node ace seed
 npm run dev        # http://127.0.0.1:3333
