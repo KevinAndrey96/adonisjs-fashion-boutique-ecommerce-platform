@@ -15,8 +15,9 @@ Tienda en línea para una boutique colombiana de ropa femenina, lencería y acce
 - Portada con colecciones (bodys, panties, brasieres, lencería y accesorios), categorías y detalle de producto con relacionados.
 - Búsqueda por nombre y categoría, filtros por rango de precio y orden por precio o nombre.
 - Carrito en el navegador. El checkout recalcula cada línea con el precio de la base de datos, nunca con el que envía el navegador, y limita las cantidades a 1..20.
+- Datos de envío obligatorios y validados en el servidor; nadie puede consultar los datos de otro cliente por su correo.
 - Pago contraentrega o con el formulario web de PayU, firmado con MD5 según su especificación y activado solo con `ENABLE_PAYU=true`.
-- Cupones de descuento de un solo uso, boletín que envía un cupón de bienvenida y correo de confirmación del pedido.
+- Cupones de descuento de un solo uso, boletín que envía un cupón de bienvenida generado con `crypto` y correo de confirmación del pedido.
 
 **Backoffice** (`/admin`, con sesión)
 
@@ -32,7 +33,7 @@ flowchart LR
     Admin[Administrador] -->|/admin con sesión| Rutas
     Rutas --> Tienda[Index, Product, Coupon, Newsletter]
     Rutas --> Backoffice[Admin: Product, Category, Order, Client, User]
-    Tienda --> Servicios[Services: Cart y Money]
+    Tienda --> Servicios[Services: Cart, Customer y Money]
     Tienda --> Modelos[Lucid: Product, Category, Order, Client, Coupon]
     Backoffice --> Modelos
     Modelos --> BD[(MySQL 8.0 o SQLite)]
@@ -41,6 +42,7 @@ flowchart LR
 ```
 
 - `app/Services/Cart.js` interpreta el carrito y lo resuelve contra el catálogo.
+- `app/Services/Customer.js` valida los datos de envío del checkout.
 - `app/Services/Money.js` formatea pesos colombianos para todas las vistas.
 - `app/Exceptions/Handler.js` redirige al login cuando falta la sesión en el backoffice.
 
@@ -88,7 +90,8 @@ Las pruebas levantan el servidor real sobre la base SQLite sembrada y revisan:
 - los endpoints JSON del carrito;
 - los 404;
 - la redirección del backoffice al login;
-- el rechazo de un POST sin token CSRF;
+- que no exista la consulta de clientes por correo;
+- el rechazo de un POST sin token CSRF y de un checkout sin datos de envío;
 - una compra completa con token CSRF, que confirma que el pedido usa el precio de la base, limita la cantidad e ignora productos inexistentes.
 
 El CI corre lint y pruebas en Node 18, 20 y 22, construye la imagen Docker y espera a que el contenedor quede saludable.
@@ -97,6 +100,8 @@ El CI corre lint y pruebas en Node 18, 20 y 22, construye la imagen Docker y esp
 
 Proyecto de 2020 y 2021 para una boutique de Bogotá. En noviembre de 2026 se ordenó sin cambiar el stack:
 
+- se quitó el endpoint que devolvía nombre, teléfono y dirección de cualquier cliente a partir de su correo;
+- el checkout valida los datos de envío en el servidor, y el teléfono ya no es único (dos clientes con el mismo número rompían la compra);
 - el servidor ya no intenta leer certificados inexistentes al arrancar (fallaba con ENOENT);
 - PayU queda apagado de verdad cuando `ENABLE_PAYU` no es `true` (antes la cadena `"false"` lo activaba);
 - las cantidades negativas o enormes ya no alteran el total;

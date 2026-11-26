@@ -1,5 +1,7 @@
 'use strict'
 
+const crypto = require('crypto')
+
 const Newsletter = use('App/Models/Newsletter')
 const Coupon = use('App/Models/Coupon')
 const Env = use('Env')
@@ -11,11 +13,11 @@ class NewsletterController {
       const userData = request.only(['email', 'first_name', 'last_name', 'phone'])
       await Newsletter.create(userData)
 
-      const randomCode =
-        Math.random().toString(36).substring(2, 6).toUpperCase() +
-        Math.random().toString(36).substring(2, 6).toUpperCase()
-
-      const coupon = await Coupon.create({ code: randomCode, discount: 10, status: 'active' })
+      const coupon = await Coupon.create({
+        code: crypto.randomBytes(5).toString('hex').toUpperCase(),
+        discount: 10,
+        status: 'active'
+      })
 
       try {
         const Mail = use('Mail')

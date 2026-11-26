@@ -12,6 +12,7 @@ const Env = use('Env')
 const Logger = use('Logger')
 const { formatCop, withCopPrices } = use('App/Services/Money')
 const { resolveCartLines } = use('App/Services/Cart')
+const { customerFromRequest } = use('App/Services/Customer')
 
 const SORTS = {
   pricedesc: ['price', 'desc'],
@@ -146,16 +147,16 @@ class ProductController {
   }
 
   async pay ({ request, response, view, session }) {
-    const email = (request.input('EMAIL') || '').trim().toLowerCase()
+    const customer = customerFromRequest(request)
     const lines = await resolveCartLines(request.input('CART'))
 
-    if (!email || lines.length === 0) {
-      session.flash({ error: 'Ingresa tu correo y agrega al menos un producto al carrito.' })
+    if (!customer || lines.length === 0) {
+      session.flash({ error: 'Completa tus datos de envío y agrega al menos un producto al carrito.' })
 
       return response.redirect('/cart')
     }
 
-    const client = await this.upsertClient(email, request)
+    const client = await this.upsertClient(customer)
     const paymentType = request.input('payment_type') || 'cash_on_delivery'
 
     const order = await Order.create({
@@ -183,10 +184,10 @@ class ProductController {
     order.details = summary
     await order.save()
 
-    await this.sendConfirmation(email, order, summary)
+    await this.sendConfirmation(customer.email, order, summary)
 
     if (paymentType === 'payu' && Env.get('ENABLE_PAYU') === 'true') {
-      return view.render('order_completed_payu', { payu: this.payuForm(order, summary, email, request) })
+      return view.render('order_completed_payu', { payu: this.payuForm(order, summary, customer.email, request) })
     }
 
     return response.redirect('/confirm')
@@ -206,25 +207,13 @@ class ProductController {
     })
   }
 
-  async upsertClient (email, request) {
-    const data = {
-      name: request.input('NAME'),
-      phone: request.input('PHONE'),
-      address: request.input('ADDRESS'),
-      city: request.input('CITY'),
-      country: request.input('COUNTRY')
-    }
-
-    const client = await Client.findBy('email', email)
+  async upsertClient (customer) {
+    const client = await Client.findBy('email', customer.email)
     if (!client) {
-      return Client.create({ ...data, email })
+      return Client.create(customer)
     }
 
-    for (const [key, value] of Object.entries(data)) {
-      if (value) {
-        client[key] = value
-      }
-    }
+    client.merge(customer)
     await client.save()
 
     return client

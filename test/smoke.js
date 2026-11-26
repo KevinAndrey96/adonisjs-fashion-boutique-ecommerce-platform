@@ -15,6 +15,15 @@ const path = require('node:path')
 let server
 let baseUrl
 
+const CUSTOMER = {
+  EMAIL: 'Comprador@Example.com',
+  NAME: 'Comprador de prueba',
+  PHONE: '3000000000',
+  ADDRESS: 'Calle 1 # 2-3',
+  CITY: 'Bogotá',
+  COUNTRY: 'Colombia'
+}
+
 function freePort () {
   return new Promise((resolve, reject) => {
     const probe = net.createServer().listen(0, '127.0.0.1', () => {
@@ -65,6 +74,12 @@ for (const page of ['/', '/categories', '/cart', '/search?name=body&sort=pricede
     assert.match(response.headers.get('content-type'), /text\/html/)
   })
 }
+
+test('customer data is not exposed by email lookup', async () => {
+  const response = await get('/getClient?email=cliente%40example.com')
+
+  assert.equal(response.status, 404)
+})
 
 test('getProduct returns the product as JSON', async () => {
   const response = await get('/getProduct?id=1')
@@ -163,12 +178,7 @@ test('a guest buys with prices from the catalog and a clamped quantity', async (
   const pay = await post(jar, '/pay', {
     _csrf: csrfToken(checkoutHtml),
     CART: cart,
-    EMAIL: 'Compradora@Example.com',
-    NAME: 'Compradora de prueba',
-    PHONE: '3000000000',
-    ADDRESS: 'Calle 1 # 2-3',
-    CITY: 'Bogotá',
-    COUNTRY: 'Colombia',
+    ...CUSTOMER,
     payment_type: 'cash_on_delivery'
   })
 
@@ -190,4 +200,16 @@ test('checkout without a CSRF token is rejected', async () => {
   })
 
   assert.equal(response.status, 403)
+})
+
+test('checkout with incomplete shipping details goes back to the cart', async () => {
+  const jar = cookieJar()
+  const cartPage = await get('/cart')
+  jar.store(cartPage)
+  const cart = JSON.stringify({ cart: [{ Product: 1, Quantity: 1 }] })
+
+  const response = await post(jar, '/pay', { _csrf: csrfToken(await cartPage.text()), CART: cart, EMAIL: 'sin-datos@example.com' })
+
+  assert.equal(response.status, 302)
+  assert.equal(response.headers.get('location'), '/cart')
 })
